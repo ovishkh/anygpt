@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum MessageRole {
+  system
+  user
+  assistant
+}
+
+enum ProviderType {
+  openai
+  anthropic
+  gemini
+  openrouter
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String?
+  email         String?        @unique
+  emailVerified DateTime?
+  image         String?
+  avatar        String?        // Custom field
+  role          UserRole       @default(USER)
+  tier          UserTier       @default(FREE)
+  
+  // NextAuth
+  accounts      Account[]
+  sessions      Session[]
+
+  // Relationships
+  apiKeys       ApiKey[]
+  conversations Conversation[]
+  settings      UserSettings?
+  usage         UsageStats[]
+  
+  // Timestamps
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model UserSettings {
+  id        String @id @default(cuid())
+  userId    String @unique
+  user      User   @relation(fields: [userId], references: [id])
+  theme     String @default("default")
+  language  String @default("en")
+}
+
+model UsageStats {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime @default(now())
+  tokens    BigInt   @default(0)
+  requests  Int      @default(0)
+}
+
+model Provider {
+  id            String       @id @default(cuid())
+  name          ProviderType
+  displayName   String
+  enabled       Boolean      @default(true)
+  config        Json?        // Provider-specific config
+  
+  // Models available for this provider
+  models        Model[]
+  
+  // Usage tracking
+  totalRequests Int          @default(0)
+  totalTokens   BigInt       @default(0)
+  totalCost     Float        @default(0)
+  
+  // Rate limiting
+  rateLimit     Int          @default(1000)
+  rateWindow    Int          @default(3600) // seconds
+
+  apiKeys       ApiKey[]
+}
+
+model Model {
+  id            String   @id @default(cuid())
+  providerId    String
+  provider      Provider @relation(fields: [providerId], references: [id])
+  name          String   // External model ID (e.g. gpt-4)
+  displayName   String
+  enabled       Boolean  @default(true)
+  capabilities  String[] // chat, vision, etc.
+  contextWindow Int
+  maxTokens     Int
+  inputCost     Float    // per 1K tokens
+  outputCost    Float    // per 1K tokens
+}
+
+model ApiKey {
+  id            String   @id @default(cuid())
+  userId        String
+  providerId    String
+  name          String
+  key           String   // Encrypted in practice, but string in schema
+  enabled       Boolean  @default(true)
+  lastUsed      DateTime?
+  usageCount    Int      @default(0)
+  
+  // Relationships
+  user          User     @relation(fields: [userId], references: [id])
+  provider      Provider @relation(fields: [providerId], references: [id])
+  
+  createdAt     DateTime @default(now())
+}
+
+model Conversation {
+  id            String    @id @default(cuid())
+  userId        String
+  title         String    @default("New Conversation")
+  providerId    String
+  model         String
+  tokensUsed    Int       @default(0)
+  estimatedCost Float     @default(0)
+  
+  // Messages (1:N)
+  messages      Message[]
+  
+  // Metadata
+  tags          String[]  @default([])
+  archived      Boolean   @default(false)
+  starred       Boolean   @default(false)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  role           MessageRole
+  content        String
+  tokens         Int
+  model          String?
+  provider       ProviderType?
+  cost           Float?
+  
+  // Metadata
+  processingTime Int?         // milliseconds
+  error          String?
+  
+  createdAt      DateTime     @default(now())
+}
+
+model OpenRouterRequest {
+  id             String   @id @default(cuid())
+  conversationId String
+  model          String
+  route          String   // which model was actually used
+  cost           Float
+  latency        Int
+  success        Boolean
+  fallbackUsed   Boolean  @default(false)
+  
+  createdAt      DateTime @default(now())
+}
+
+model UsageAnalytics {
+  id            String       @id @default(cuid())
+  userId        String
+  date          DateTime
+  provider      ProviderType
+  model         String
+  requests      Int
+  tokens        Int
+  cost          Float
+  
+  @@index([userId, date])
+}
