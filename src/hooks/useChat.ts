@@ -49,7 +49,7 @@ export function useChat() {
                                 const parsed = JSON.parse(data);
                                 accumulatedResponse += parsed.delta || '';
                                 setCurrentResponse(accumulatedResponse);
-                            } catch (_e) {
+                            } catch {
                                 // Ignore parsing errors for partial chunks
                             }
                         }

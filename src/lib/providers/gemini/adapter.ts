@@ -88,7 +88,7 @@ export class GeminiProvider extends BaseProvider {
                         done: false,
                     };
                 }
-            } catch (_e) {
+            } catch {
                 // Handle partial JSON or other stream issues
             }
         }

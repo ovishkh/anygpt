@@ -82,7 +82,7 @@ export class OpenRouterProvider extends BaseProvider {
                             model: data.model,
                             done: false,
                         };
-                    } catch (_e) {
+                    } catch {
                         // Error parsing JSON
                     }
                 }
